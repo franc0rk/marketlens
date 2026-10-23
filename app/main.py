@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -10,6 +10,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
+from app.crypto_data import fetch_binance_ohlcv, fetch_binance_prices
 from app.indicators import (
     calculate_adx,
     calculate_bbands,
@@ -20,11 +21,11 @@ from app.indicators import (
 from app.market_data import MarketDataError, TIMEFRAMES, fetch_ohlcv, fetch_usd_mxn_rate
 
 app = FastAPI(
-    title="Stock Indicators API",
+    title="MarketLens Indicators API",
     description=(
-        "OHLC prices and RSI, ADX, Bollinger Bands, and EMA 10/55 indicators."
+        "Stock and crypto OHLC prices with RSI, ADX, Bollinger Bands, and EMA 10/55 indicators."
     ),
-    version="1.0.0",
+    version="1.1.0",
 )
 
 STOCKS = {
@@ -58,6 +59,18 @@ STOCKS = {
 }
 
 PROVIDER_SYMBOLS = {"GOLD": "GC=F", "SILVER": "SI=F"}
+CRYPTO_ASSETS = {
+    "BTC": {"name": "BTC", "category": "Layer 1", "pair": "BTCUSDT"},
+    "ETH": {"name": "ETH", "category": "Layer 1", "pair": "ETHUSDT"},
+    "BNB": {"name": "BNB", "category": "Exchange", "pair": "BNBUSDT"},
+    "SOL": {"name": "SOL", "category": "Layer 1", "pair": "SOLUSDT"},
+    "XRP": {"name": "XRP", "category": "Payments", "pair": "XRPUSDT"},
+    "ADA": {"name": "ADA", "category": "Layer 1", "pair": "ADAUSDT"},
+    "DOGE": {"name": "DOGE", "category": "Meme", "pair": "DOGEUSDT"},
+    "TRX": {"name": "TRX", "category": "Layer 1", "pair": "TRXUSDT"},
+    "AVAX": {"name": "AVAX", "category": "Layer 1", "pair": "AVAXUSDT"},
+    "LINK": {"name": "LINK", "category": "Oracle", "pair": "LINKUSDT"},
+}
 CACHE_FILE = Path(__file__).resolve().parent.parent / "stocks_last_year.txt"
 CACHE_LOCK = asyncio.Lock()
 
@@ -70,6 +83,7 @@ def _timeframe_result(
     bars: pd.DataFrame,
     start: date | None = None,
     end: date | None = None,
+    fractional_volume: bool = False,
 ) -> dict[str, object]:
     close = bars["Close"].astype("float64")
     ema10 = calculate_ema(close, length=10)
@@ -106,7 +120,13 @@ def _timeframe_result(
                 "high": _json_number(row["High"]),
                 "low": _json_number(row["Low"]),
                 "close": _json_number(row["Close"]),
-                "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else None,
+                "volume": (
+                    float(row["Volume"])
+                    if fractional_volume and pd.notna(row["Volume"])
+                    else int(row["Volume"])
+                    if pd.notna(row["Volume"])
+                    else None
+                ),
             }
             for _, row in selected_bars.iterrows()
         ],
@@ -141,6 +161,82 @@ async def get_exchange_rate() -> dict[str, float | str]:
         return await run_in_threadpool(fetch_usd_mxn_rate)
     except MarketDataError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+def _requested_crypto_symbols(symbols: list[str] | None) -> list[str]:
+    requested = [symbol.upper() for symbol in symbols] if symbols else list(CRYPTO_ASSETS)
+    unknown = sorted(set(requested) - CRYPTO_ASSETS.keys())
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported crypto symbol(s): {', '.join(unknown)}. "
+            f"Choose from: {', '.join(CRYPTO_ASSETS)}.",
+        )
+    return requested
+
+
+async def _fetch_crypto_assets(
+    requested: list[str],
+    start: date,
+    end: date,
+) -> dict[str, list[dict[str, object]]]:
+    results: list[dict[str, object]] = []
+    for symbol in requested:
+        asset: dict[str, object] = {
+            "name": CRYPTO_ASSETS[symbol]["name"],
+            "category": CRYPTO_ASSETS[symbol]["category"],
+            "timestamps": {},
+            "prices": {},
+            "close": {},
+            "ema10": {},
+            "ema55": {},
+            "rsi": {},
+            "adx": {},
+            "bbands": {},
+            "bbands_position_streak": {},
+        }
+        try:
+            for timeframe in TIMEFRAMES:
+                bars = await run_in_threadpool(
+                    fetch_binance_ohlcv,
+                    CRYPTO_ASSETS[symbol]["pair"],
+                    timeframe,
+                    start,
+                    end,
+                )
+                data = _timeframe_result(bars, start, end, fractional_volume=True)
+                for key, values in data.items():
+                    timeframe_values = asset[key]
+                    if not isinstance(timeframe_values, dict):
+                        raise RuntimeError(f"Invalid response structure for {key}.")
+                    timeframe_values[timeframe] = values
+        except MarketDataError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+        results.append(asset)
+    return {"assets": results}
+
+
+@app.get("/api/crypto")
+async def get_crypto(
+    symbols: Annotated[
+        list[str] | None,
+        Query(description="Optional subset of configured crypto symbols."),
+    ] = None,
+) -> dict[str, list[dict[str, object]]]:
+    requested = _requested_crypto_symbols(symbols)
+    end = date.today()
+    start = end - timedelta(days=365)
+    return await _fetch_crypto_assets(requested, start, end)
+
+
+@app.get("/api/crypto/prices")
+async def get_crypto_prices() -> dict[str, dict[str, float]]:
+    pairs = {symbol: details["pair"] for symbol, details in CRYPTO_ASSETS.items()}
+    try:
+        prices = await run_in_threadpool(fetch_binance_prices, pairs)
+    except MarketDataError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {"prices": prices}
 
 
 @app.get("/api/stocks")
