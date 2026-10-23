@@ -1,8 +1,8 @@
 # Stock Indicators Dashboard
 
-A local stock-market dashboard with a FastAPI backend and Angular frontend.
-It displays prices and technical indicators for a configured list of stocks,
-ETFs, and gold/silver futures.
+A local stock and cryptocurrency dashboard with a FastAPI backend and Angular
+frontend. It displays prices and technical indicators for configured stocks,
+ETFs, gold/silver futures, and USDT crypto pairs.
 
 ## Market data provider
 
@@ -16,6 +16,14 @@ Yahoo does not offer a native 4-hour interval through `yfinance`; the API
 aggregates hourly bars into 4-hour bars. Yahoo limits hourly history to roughly
 730 days. A request for 4-hour data starting earlier than that returns a clear
 provider error; daily, weekly, and monthly intervals can use older data.
+
+Crypto market data comes from Binance's public Spot REST API and requires no
+API key. The dashboard includes BTC, ETH, BNB, SOL, XRP, ADA, DOGE, TRX, AVAX,
+and LINK, all quoted in USDT. Its live quote endpoint is polled every five
+seconds; historical candles and indicators are loaded separately and can be
+refreshed from the Crypto page. Binance availability, API limits, regional
+access, and terms can change; check Binance's current terms before commercial
+or production use.
 
 ## Quick start
 
@@ -50,9 +58,11 @@ npm ci
 npm start
 ```
 
-Open [http://localhost:4200](http://localhost:4200). The dashboard uses the
-included `stocks_last_year.txt` cache to show its initial data. Use the refresh
-controls to fetch current prices; live refreshes require internet access.
+Open [http://localhost:4200](http://localhost:4200) for Stocks, or
+[http://localhost:4200/crypto](http://localhost:4200/crypto) for Crypto. The
+Stocks page uses the included `stocks_last_year.txt` cache; crypto history and
+live quotes are loaded from Binance. Refreshing market data requires internet
+access.
 
 The API is available at [http://127.0.0.1:8000](http://127.0.0.1:8000), with
 interactive documentation at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
@@ -96,7 +106,13 @@ accepts the same optional `symbols`, `start`, and `end` parameters.
 `GET /api/exchange-rate` returns the latest available USD/MXN rate and quote
 date used to display MXN-converted prices in the dashboard.
 
-Each stock has `timestamps`, `prices`, `close`, `ema10`, `ema55`, `rsi`, `adx`,
+`GET /api/crypto` returns one year of candle and indicator data for the
+configured crypto assets. It accepts repeated `symbols` parameters, e.g.
+`?symbols=BTC&symbols=ETH`. `GET /api/crypto/prices` returns the current
+Binance spot quotes in USDT for the configured assets; the frontend polls this
+endpoint every five seconds.
+
+Each market asset has `timestamps`, `prices`, `close`, `ema10`, `ema55`, `rsi`, `adx`,
 and `bbands` mappings keyed by timeframe. `prices` contains OHLCV bars. Arrays
 at the same timeframe index refer to the same bar.
 Indicator values are `null` until sufficient warmup data exists. EMA values use

@@ -1,8 +1,10 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 export type Timeframe = 'monthly' | 'weekly' | 'daily' | '4h';
+export type MarketType = 'stocks' | 'crypto';
 
 export const TIMEFRAMES: Timeframe[] = ['monthly', 'weekly', 'daily', '4h'];
 
@@ -52,6 +54,14 @@ export interface StocksResponse {
   stocks: Stock[];
 }
 
+export interface CryptoResponse {
+  assets: Stock[];
+}
+
+export interface CryptoPricesResponse {
+  prices: Record<string, number>;
+}
+
 export interface ExchangeRate {
   rate: number;
   date: string;
@@ -63,6 +73,29 @@ export class StockDataService {
 
   getStocks(): Observable<StocksResponse> {
     return this.http.get<StocksResponse>('/api/stocks/cache');
+  }
+
+  getMarketAssets(market: MarketType): Observable<StocksResponse> {
+    return market === 'crypto'
+      ? this.http.get<CryptoResponse>('/api/crypto').pipe(map(({ assets }) => ({ stocks: assets })))
+      : this.getStocks();
+  }
+
+  refreshMarketAssets(market: MarketType, symbol?: string): Observable<StocksResponse> {
+    if (market === 'stocks') {
+      return this.refreshStocks(symbol);
+    }
+    let params = new HttpParams();
+    if (symbol) {
+      params = params.set('symbols', symbol);
+    }
+    return this.http
+      .get<CryptoResponse>('/api/crypto', { params })
+      .pipe(map(({ assets }) => ({ stocks: assets })));
+  }
+
+  getCryptoPrices(): Observable<CryptoPricesResponse> {
+    return this.http.get<CryptoPricesResponse>('/api/crypto/prices');
   }
 
   getUsdMxnRate(): Observable<ExchangeRate> {

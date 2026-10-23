@@ -5,16 +5,20 @@
       <span>market<span class="brand-light">lens</span></span>
     </a>
     <div class="topbar-right">
-      <span class="data-status"><span class="status-dot"></span> {{ dataSourceLabel() }}</span>
-      <span class="market-clock">US MARKETS</span>
+      <nav class="market-navigation" aria-label="Market pages">
+        <a routerLink="/stocks" [class.active]="!isCrypto" [attr.aria-current]="!isCrypto ? 'page' : null">Stocks</a>
+        <a routerLink="/crypto" [class.active]="isCrypto" [attr.aria-current]="isCrypto ? 'page' : null">Crypto</a>
+      </nav>
+      <span class="data-status" [class.live-status]="isCrypto"><span class="status-dot"></span> {{ dataSourceLabel() }}</span>
+      <span class="market-clock">{{ isCrypto ? '24/7 MARKETS' : 'US MARKETS' }}</span>
     </div>
   </header>
 
   <section class="intro">
     <div>
-      <p class="eyebrow">MARKET OVERVIEW <span>·</span> {{ stocks().length }} ASSETS</p>
-      <h1>Watchlist <span class="heading-period">/</span> <span>Indicators</span></h1>
-      <p class="intro-copy">A focused view of price action and momentum across your market.</p>
+      <p class="eyebrow">{{ isCrypto ? 'CRYPTO MARKET' : 'STOCK MARKET' }} <span>·</span> {{ stocks().length }} ASSETS</p>
+      <h1>{{ isCrypto ? 'Crypto' : 'Stocks' }} <span class="heading-period">/</span> <span>Indicators</span></h1>
+      <p class="intro-copy">A focused view of price action and momentum across {{ isCrypto ? 'digital assets' : 'the stock market' }}.</p>
     </div>
     <div class="intro-actions">
       <button class="refresh-all-button" (click)="refreshAll()" [disabled]="loading() || refreshing()">
@@ -44,7 +48,7 @@
     @if (refreshError()) {
       <p class="refresh-error" role="alert">{{ refreshError() }}</p>
     }
-    <section class="filter-bar" aria-label="Filter and sort stock cards">
+    <section class="filter-bar" [attr.aria-label]="'Filter and sort ' + (isCrypto ? 'crypto' : 'stock') + ' cards'">
       <div class="filter-controls">
         <label class="filter-field">
           <span>NAME</span>
@@ -77,20 +81,32 @@
         </select>
       </label>
     </section>
-    @if (usdMxnRate() !== null) {
-      <p class="exchange-rate-status">
-        Conversion rate: $1.00 USD = {{ formatExchangeRate(usdMxnRate()) }} MXN
-        <span>· {{ usdMxnRateDate() }}</span>
+    @if (isCrypto) {
+      <p class="exchange-rate-status live-price-status" aria-live="polite">
+        Binance spot prices in USDT · updates every 5 seconds · indicators use latest candles
+        @if (lastPriceUpdate()) { <span>· Updated {{ lastPriceUpdate() }}</span> }
       </p>
-    } @else if (exchangeRateError()) {
-      <p class="exchange-rate-status exchange-rate-error" role="alert">
-        Could not load the USD/MXN conversion rate. MXN prices are unavailable.
-        {{ exchangeRateError() }}
-      </p>
+      @if (livePriceError()) {
+        <p class="exchange-rate-status exchange-rate-error" role="alert">
+          Could not refresh live crypto prices. {{ livePriceError() }}
+        </p>
+      }
     } @else {
-      <p class="exchange-rate-status" aria-live="polite">Loading USD/MXN conversion rate…</p>
+      @if (usdMxnRate() !== null) {
+        <p class="exchange-rate-status">
+          Conversion rate: $1.00 USD = {{ formatExchangeRate(usdMxnRate()) }} MXN
+          <span>· {{ usdMxnRateDate() }}</span>
+        </p>
+      } @else if (exchangeRateError()) {
+        <p class="exchange-rate-status exchange-rate-error" role="alert">
+          Could not load the USD/MXN conversion rate. MXN prices are unavailable.
+          {{ exchangeRateError() }}
+        </p>
+      } @else {
+        <p class="exchange-rate-status" aria-live="polite">Loading USD/MXN conversion rate…</p>
+      }
     }
-    <section class="ticker-grid" aria-label="Stock indicators">
+    <section class="ticker-grid" [attr.aria-label]="(isCrypto ? 'Crypto' : 'Stock') + ' indicators'">
       @for (stock of filteredStocks(); track stock.name) {
         <article class="ticker-card">
           <button class="ticker-card-open" (click)="openStock(stock)" [attr.aria-label]="'Open ' + stock.name + ' details'">
@@ -108,13 +124,15 @@
               <div class="card-prices-layout">
                 <div class="card-prices-main">
                   <div class="card-price-row">
-                    <span class="price-currency">USD</span>
-                    <span class="last-price">{{ formatPrice(latest(stock.prices.daily)?.close) }}</span>
+                    <span class="price-currency">{{ priceCurrency }}</span>
+                    <span class="last-price">{{ formatPrice(displayPrice(stock)) }}</span>
                   </div>
-                  <div class="card-price-row converted-price-row">
-                    <span class="price-currency">MXN</span>
-                    <span class="converted-price">{{ formatConvertedPrice(latest(stock.prices.daily)?.close) }}</span>
-                  </div>
+                  @if (!isCrypto) {
+                    <div class="card-price-row converted-price-row">
+                      <span class="price-currency">MXN</span>
+                      <span class="converted-price">{{ formatConvertedPrice(latest(stock.prices.daily)?.close) }}</span>
+                    </div>
+                  }
                 </div>
                 <div class="card-emas" aria-label="Exponential moving averages">
                   <div class="card-ema-row">
@@ -220,7 +238,7 @@
   }
 
   <footer class="page-footer">
-    <span>MARKETLENS <span class="footer-separator">/</span> INDICATOR DASHBOARD</span>
+    <span>MARKETLENS <span class="footer-separator">/</span> {{ isCrypto ? 'CRYPTO' : 'STOCK' }} INDICATOR DASHBOARD</span>
     <span>INDICATORS ARE FOR INFORMATIONAL PURPOSES ONLY</span>
   </footer>
 </main>
@@ -366,7 +384,7 @@
           <div class="chart-toolbar">
             <div class="chart-instrument">
               <span class="toolbar-symbol">{{ stock.name }}</span>
-              <span class="toolbar-price">{{ formatPrice(latest(stock.prices[selectedTimeframe()])?.close) }}</span>
+              <span class="toolbar-price">{{ formatPrice(selectedTimeframe() === 'daily' ? displayPrice(stock) : latest(stock.prices[selectedTimeframe()])?.close) }}</span>
               <span class="toolbar-date">{{ latestTimestamp(stock, selectedTimeframe()) }}</span>
             </div>
             <div class="timeframe-switcher" aria-label="Chart interval">
