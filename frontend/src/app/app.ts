@@ -4,11 +4,17 @@ import {
   computed,
   ElementRef,
   HostListener,
+  Input,
+  OnChanges,
   OnDestroy,
   OnInit,
+  SimpleChanges,
   ViewChild,
   signal,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { EMPTY, Subscription, timer } from 'rxjs';
+import { catchError, exhaustMap, tap } from 'rxjs/operators';
 import {
   CandlestickData,
   CandlestickSeries,
@@ -19,7 +25,15 @@ import {
   LineSeries,
   UTCTimestamp,
 } from 'lightweight-charts';
-import { BollingerBands, PriceBar, Stock, StockDataService, Timeframe, TIMEFRAMES } from './stock-data';
+import {
+  BollingerBands,
+  MarketType,
+  PriceBar,
+  Stock,
+  StockDataService,
+  Timeframe,
+  TIMEFRAMES,
+} from './stock-data';
 
 type AnalysisTab = 'summary' | 'chart';
 type PriceOverlayMode = 'bbands' | 'emas';
@@ -32,11 +46,13 @@ type StockSortField =
   | 'bbandsStreak';
 
 @Component({
-  selector: 'app-root',
+  selector: 'app-market-page',
+  imports: [RouterLink],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
-export class App implements OnInit, AfterViewInit, OnDestroy {
+export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
+  @Input() market: MarketType = 'stocks';
   @ViewChild('priceChart') private priceChartElement?: ElementRef<HTMLDivElement>;
   @ViewChild('rsiChart') private rsiChartElement?: ElementRef<HTMLDivElement>;
   @ViewChild('adxChart') private adxChartElement?: ElementRef<HTMLDivElement>;
@@ -45,13 +61,16 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   protected readonly usdMxnRate = signal<number | null>(null);
   protected readonly usdMxnRateDate = signal('');
   protected readonly exchangeRateError = signal('');
+  protected readonly livePrices = signal<Record<string, number>>({});
+  protected readonly livePriceError = signal('');
+  protected readonly lastPriceUpdate = signal('');
   protected readonly nameFilter = signal('');
   protected readonly categoryFilter = signal('');
   protected readonly sortField = signal<StockSortField>('name');
   protected readonly sortOptions: { value: StockSortField; label: string }[] = [
     { value: 'name', label: 'Name' },
     { value: 'category', label: 'Category' },
-    { value: 'price', label: 'Price (USD)' },
+    { value: 'price', label: 'Price' },
     { value: 'rsi', label: 'RSI' },
     { value: 'adx', label: 'ADX' },
     { value: 'bbandsStreak', label: 'BBANDS streak' },
@@ -112,12 +131,40 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   private indicatorRotationTimer?: number;
   private updatePriceOverlayVisibility?: (mode: PriceOverlayMode) => void;
   private viewReady = false;
+  private initialized = false;
+  private pricePoll?: Subscription;
 
   constructor(private readonly stockData: StockDataService) {}
 
   ngOnInit(): void {
+    this.initialized = true;
+    this.initializeMarket();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (this.initialized && changes['market'] && !changes['market'].firstChange) {
+      this.closeStock();
+      this.nameFilter.set('');
+      this.categoryFilter.set('');
+      this.sortField.set('name');
+      this.initializeMarket();
+    }
+  }
+
+  private initializeMarket(): void {
+    this.pricePoll?.unsubscribe();
+    this.livePrices.set({});
+    this.livePriceError.set('');
+    this.lastPriceUpdate.set('');
     this.loadStocks();
-    this.loadExchangeRate();
+    if (this.isCrypto) {
+      this.startPricePolling();
+      this.usdMxnRate.set(null);
+      this.usdMxnRateDate.set('');
+      this.exchangeRateError.set('');
+    } else {
+      this.loadExchangeRate();
+    }
   }
 
   ngAfterViewInit(): void {
@@ -125,6 +172,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.pricePoll?.unsubscribe();
     this.stopIndicatorRotation();
     this.destroyCharts();
   }
@@ -137,7 +185,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   protected loadStocks(): void {
     this.loading.set(true);
     this.error.set('');
-    this.stockData.getStocks().subscribe({
+    this.stockData.getMarketAssets(this.market).subscribe({
       next: ({ stocks }) => {
         this.stocks.set(stocks.map((stock) => this.normalizeStock(stock)));
         this.loading.set(false);
@@ -193,7 +241,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       case 'category':
         return stock.category;
       case 'price':
-        return this.finiteSortValue(this.latest(stock.prices.daily)?.close);
+        return this.finiteSortValue(this.displayPrice(stock));
       case 'rsi':
         return this.finiteSortValue(this.latest(stock.rsi.daily));
       case 'adx':
@@ -237,6 +285,20 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
 
   protected latest<T>(values: T[] | undefined): T | undefined {
     return values?.length ? values[values.length - 1] : undefined;
+  }
+
+  protected get isCrypto(): boolean {
+    return this.market === 'crypto';
+  }
+
+  protected get priceCurrency(): string {
+    return this.isCrypto ? 'USDT' : 'USD';
+  }
+
+  protected displayPrice(stock: Stock): number | null | undefined {
+    return this.isCrypto
+      ? (this.livePrices()[stock.name] ?? this.latest(stock.prices.daily)?.close)
+      : this.latest(stock.prices.daily)?.close;
   }
 
   private emaValues(
@@ -468,7 +530,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected dataSourceLabel(): string {
-    return 'Saved data';
+    return this.isCrypto ? 'Binance · LIVE' : 'Saved data';
   }
 
   protected displayedDateRange(): string {
@@ -519,16 +581,22 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     this.refreshing.set(true);
     this.refreshingTicker.set(symbol ?? null);
     this.refreshError.set('');
-    if (!symbol) {
+    if (!symbol && !this.isCrypto) {
       this.loadExchangeRate();
     }
-    this.stockData.refreshStocks(symbol).subscribe({
+    this.stockData.refreshMarketAssets(this.market, symbol).subscribe({
       next: ({ stocks }) => {
         const normalizedStocks = stocks.map((stock) => this.normalizeStock(stock));
-        this.stocks.set(normalizedStocks);
+        const mergedStocks =
+          this.isCrypto && symbol
+            ? this.stocks().map(
+                (stock) => normalizedStocks.find((fresh) => fresh.name === stock.name) ?? stock,
+              )
+            : normalizedStocks;
+        this.stocks.set(mergedStocks);
         const selectedName = this.selectedStock()?.name;
         if (selectedName) {
-          this.selectedStock.set(normalizedStocks.find((stock) => stock.name === selectedName) ?? null);
+          this.selectedStock.set(mergedStocks.find((stock) => stock.name === selectedName) ?? null);
         }
         this.refreshing.set(false);
         this.refreshingTicker.set(null);
@@ -537,11 +605,33 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
         }
       },
       error: (error: unknown) => {
-        this.refreshError.set(error instanceof Error ? error.message : 'The data refresh failed.');
+        this.refreshError.set(error instanceof Error ? error.message : 'The market data refresh failed.');
         this.refreshing.set(false);
         this.refreshingTicker.set(null);
       },
     });
+  }
+
+  private startPricePolling(): void {
+    this.pricePoll = timer(0, 5_000)
+      .pipe(
+        exhaustMap(() =>
+          this.stockData.getCryptoPrices().pipe(
+            tap(({ prices }) => {
+              this.livePrices.set(prices);
+              this.lastPriceUpdate.set(new Date().toLocaleTimeString());
+              this.livePriceError.set('');
+            }),
+            catchError((error: unknown) => {
+              this.livePriceError.set(
+                error instanceof Error ? error.message : 'The live price request failed.',
+              );
+              return EMPTY;
+            }),
+          ),
+        ),
+      )
+      .subscribe();
   }
 
   private loadExchangeRate(): void {
