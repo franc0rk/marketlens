@@ -37,7 +37,8 @@ from the project root:
 ```
 
 Open [http://localhost:4200](http://localhost:4200). Press **Ctrl+C** to stop
-both servers.
+the servers started by the script. If a compatible MarketLens API is already
+running on port 8000, the script reuses it.
 
 ### Requirements
 
