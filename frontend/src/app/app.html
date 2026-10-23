@@ -1,0 +1,407 @@
+<main class="page-shell">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Market Lens home">
+      <span class="brand-mark">M</span>
+      <span>market<span class="brand-light">lens</span></span>
+    </a>
+    <div class="topbar-right">
+      <span class="data-status"><span class="status-dot"></span> {{ dataSourceLabel() }}</span>
+      <span class="market-clock">US MARKETS</span>
+    </div>
+  </header>
+
+  <section class="intro">
+    <div>
+      <p class="eyebrow">MARKET OVERVIEW <span>·</span> {{ stocks().length }} ASSETS</p>
+      <h1>Watchlist <span class="heading-period">/</span> <span>Indicators</span></h1>
+      <p class="intro-copy">A focused view of price action and momentum across your market.</p>
+    </div>
+    <div class="intro-actions">
+      <button class="refresh-all-button" (click)="refreshAll()" [disabled]="loading() || refreshing()">
+        <span aria-hidden="true">↻</span>
+        {{ refreshing() && !refreshingTicker() ? 'Refreshing…' : 'Refresh all' }}
+      </button>
+      <div class="date-chip">
+        <span class="date-chip-icon">◷</span>
+        <span>LAST 12 MONTHS</span>
+        <span class="date-range">{{ displayedDateRange() }}</span>
+      </div>
+    </div>
+  </section>
+
+  @if (loading()) {
+    <section class="state-card" aria-live="polite">
+      <span class="loader"></span>
+      <p>Loading market data…</p>
+    </section>
+  } @else if (error()) {
+    <section class="state-card error-state" role="alert">
+      <strong>Could not load market data</strong>
+      <p>{{ error() }}</p>
+      <button class="retry-button" (click)="loadStocks()">Try again</button>
+    </section>
+  } @else {
+    @if (refreshError()) {
+      <p class="refresh-error" role="alert">{{ refreshError() }}</p>
+    }
+    <section class="filter-bar" aria-label="Filter and sort stock cards">
+      <div class="filter-controls">
+        <label class="filter-field">
+          <span>NAME</span>
+          <input
+            type="search"
+            placeholder="Search by name"
+            [value]="nameFilter()"
+            (input)="setNameFilter($event)"
+          />
+        </label>
+        <label class="filter-field">
+          <span>CATEGORY</span>
+          <select [value]="categoryFilter()" (change)="setCategoryFilter($event)">
+            <option value="">All categories</option>
+            @for (category of categories(); track category) {
+              <option [value]="category">{{ category }}</option>
+            }
+          </select>
+        </label>
+        @if (filtersActive()) {
+          <button class="clear-filters-button" (click)="clearFilters()">Clear filters</button>
+        }
+      </div>
+      <label class="filter-field sort-field">
+        <span>SORT BY</span>
+        <select [value]="sortField()" (change)="setSortField($event)">
+          @for (option of sortOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+    </section>
+    @if (usdMxnRate() !== null) {
+      <p class="exchange-rate-status">
+        Conversion rate: $1.00 USD = {{ formatExchangeRate(usdMxnRate()) }} MXN
+        <span>· {{ usdMxnRateDate() }}</span>
+      </p>
+    } @else if (exchangeRateError()) {
+      <p class="exchange-rate-status exchange-rate-error" role="alert">
+        Could not load the USD/MXN conversion rate. MXN prices are unavailable.
+        {{ exchangeRateError() }}
+      </p>
+    } @else {
+      <p class="exchange-rate-status" aria-live="polite">Loading USD/MXN conversion rate…</p>
+    }
+    <section class="ticker-grid" aria-label="Stock indicators">
+      @for (stock of filteredStocks(); track stock.name) {
+        <article class="ticker-card">
+          <button class="ticker-card-open" (click)="openStock(stock)" [attr.aria-label]="'Open ' + stock.name + ' details'">
+            <div class="card-heading">
+              <div class="ticker-identity">
+                <span class="ticker-avatar" [class]="'ticker-avatar ' + avatarClass(stock.name)">{{ tickerInitial(stock.name) }}</span>
+                <div>
+                  <span class="ticker-symbol">{{ stock.name }}</span>
+                  <span class="ticker-category">{{ stock.category }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-prices">
+              <div class="card-prices-layout">
+                <div class="card-prices-main">
+                  <div class="card-price-row">
+                    <span class="price-currency">USD</span>
+                    <span class="last-price">{{ formatPrice(latest(stock.prices.daily)?.close) }}</span>
+                  </div>
+                  <div class="card-price-row converted-price-row">
+                    <span class="price-currency">MXN</span>
+                    <span class="converted-price">{{ formatConvertedPrice(latest(stock.prices.daily)?.close) }}</span>
+                  </div>
+                </div>
+                <div class="card-emas" aria-label="Exponential moving averages">
+                  <div class="card-ema-row">
+                    <span class="card-ema-label">EMA 10</span>
+                    <span
+                      class="ema-position"
+                      [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.ema10?.daily)))"
+                      [attr.aria-label]="'Price ' + (bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.ema10?.daily)) ?? 'position unavailable') + ' EMA 10'"
+                    >
+                      @switch (bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.ema10?.daily))) {
+                        @case ('below') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 9l5 5 5-5" /></svg> }
+                        @case ('above') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V2M3 7l5-5 5 5" /></svg> }
+                        @case ('at') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M9 3l5 5-5 5" /></svg> }
+                        @default { <span aria-hidden="true">—</span> }
+                      }
+                    </span>
+                    <span class="card-ema-value">{{ formatPrice(latest(stock.ema10?.daily)) }}</span>
+                  </div>
+                  <div class="card-ema-row">
+                    <span class="card-ema-label">EMA 55</span>
+                    <span
+                      class="ema-position"
+                      [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.ema55?.daily)))"
+                      [attr.aria-label]="'Price ' + (bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.ema55?.daily)) ?? 'position unavailable') + ' EMA 55'"
+                    >
+                      @switch (bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.ema55?.daily))) {
+                        @case ('below') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 9l5 5 5-5" /></svg> }
+                        @case ('above') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V2M3 7l5-5 5 5" /></svg> }
+                        @case ('at') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M9 3l5 5-5 5" /></svg> }
+                        @default { <span aria-hidden="true">—</span> }
+                      }
+                    </span>
+                    <span class="card-ema-value">{{ formatPrice(latest(stock.ema55?.daily)) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-divider"></div>
+
+            <div class="card-indicators">
+              <div class="indicator-item">
+                <span class="indicator-label">RSI <small>14</small></span>
+                <span class="indicator-value" [style.color]="rsiColor(latest(stock.rsi.daily))">{{ formatValue(latest(stock.rsi.daily)) }}</span>
+              </div>
+              <div class="indicator-item">
+                <span class="indicator-label">ADX <small>14</small></span>
+                <span class="indicator-value" [style.color]="adxColor(latest(stock.adx.daily))">{{ formatValue(latest(stock.adx.daily)) }}</span>
+              </div>
+              <div class="indicator-item bands-item">
+                <span class="indicator-label">BBANDS <small>20, 2</small></span>
+                <span class="band-position-row">
+                  <span
+                    class="band-position"
+                    [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.bbands.daily)?.middle))"
+                    [attr.aria-label]="bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.bbands.daily)?.middle)"
+                  >
+                    @switch (bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.bbands.daily)?.middle)) {
+                      @case ('below') {
+                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 9l5 5 5-5" /></svg>
+                      }
+                      @case ('above') {
+                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V2M3 7l5-5 5 5" /></svg>
+                      }
+                      @case ('at') {
+                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M9 3l5 5-5 5" /></svg>
+                      }
+                      @default { <span class="band-position-empty">—</span> }
+                    }
+                  </span>
+                  <span class="band-middle">{{ formatPrice(latest(stock.bbands.daily)?.middle) }}</span>
+                  <span
+                    class="band-streak"
+                    [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.bbands.daily)?.middle))"
+                  >
+                    {{ bbandsStreakLabel(bbandsStreakFor(stock, 'daily'), bbandsPosition(latest(stock.prices.daily)?.close, latest(stock.bbands.daily)?.middle), 'daily') }}
+                  </span>
+                </span>
+              </div>
+            </div>
+            <span class="card-footer">OPEN ANALYSIS <span>→</span></span>
+          </button>
+          <button
+            class="ticker-refresh-button"
+            (click)="refreshTicker(stock.name)"
+            [disabled]="refreshing()"
+            [attr.aria-label]="refreshingTicker() === stock.name ? 'Refreshing ' + stock.name + ' data' : 'Refresh ' + stock.name + ' data'"
+            [title]="refreshingTicker() === stock.name ? 'Refreshing…' : 'Refresh ' + stock.name + ' data'"
+          >
+            {{ refreshingTicker() === stock.name ? '…' : '↻' }}
+          </button>
+        </article>
+      } @empty {
+        <div class="empty-filter-state">
+          <strong>No matching cards</strong>
+          <span>Try a different name or category.</span>
+          @if (filtersActive()) {
+            <button class="clear-filters-button" (click)="clearFilters()">Clear filters</button>
+          }
+        </div>
+      }
+    </section>
+  }
+
+  <footer class="page-footer">
+    <span>MARKETLENS <span class="footer-separator">/</span> INDICATOR DASHBOARD</span>
+    <span>INDICATORS ARE FOR INFORMATIONAL PURPOSES ONLY</span>
+  </footer>
+</main>
+
+@if (selectedStock(); as stock) {
+  <div class="modal-backdrop" (click)="closeStock()" (keydown.escape)="closeStock()">
+    <section class="analysis-modal" role="dialog" aria-modal="true" [attr.aria-label]="stock.name + ' analysis'" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div class="modal-title-group">
+          <span class="ticker-avatar modal-avatar" [class]="'ticker-avatar modal-avatar ' + avatarClass(stock.name)">{{ tickerInitial(stock.name) }}</span>
+          <div>
+            <div class="modal-ticker-line"><h2>{{ stock.name }}</h2><span class="category-pill">{{ stock.category }}</span></div>
+            <p>Indicator analysis <span>·</span> last 12 months</p>
+          </div>
+        </div>
+        <button class="close-button" aria-label="Close analysis" (click)="closeStock()">×</button>
+      </header>
+
+      <nav class="modal-tabs" aria-label="Analysis views">
+        <button [class.active]="activeTab() === 'summary'" (click)="selectTab('summary')"><span>▦</span> Summary</button>
+        <button [class.active]="activeTab() === 'chart'" (click)="selectTab('chart')"><span>⌁</span> Chart</button>
+      </nav>
+
+      @if (activeTab() === 'summary') {
+        <div class="summary-panel">
+          <div class="summary-heading">
+            <div>
+              <p class="eyebrow">LATEST READINGS</p>
+              <h3>Indicator summary</h3>
+            </div>
+            <span class="summary-date">{{ latestTimestamp(stock, 'daily') }}</span>
+          </div>
+          <div class="table-wrap">
+            <table class="summary-table">
+              <thead>
+                <tr>
+                  <th>INDICATOR</th>
+                  @for (timeframe of timeframes; track timeframe) {
+                    <th>{{ timeframeLabel(timeframe) }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="table-indicator"><i class="dot rsi-dot"></i> RSI <small>14</small></span></td>
+                  @for (timeframe of timeframes; track timeframe) {
+                    <td><span class="table-number" [style.color]="rsiColor(latest(stock.rsi[timeframe]))">{{ formatValue(latest(stock.rsi[timeframe])) }}</span></td>
+                  }
+                </tr>
+                <tr>
+                  <td><span class="table-indicator"><i class="dot adx-dot"></i> ADX <small>14</small></span></td>
+                  @for (timeframe of timeframes; track timeframe) {
+                    <td><span class="table-number" [style.color]="adxColor(latest(stock.adx[timeframe]))">{{ formatValue(latest(stock.adx[timeframe])) }}</span></td>
+                  }
+                </tr>
+                <tr>
+                  <td><span class="table-indicator"><i class="dot ema10-dot"></i> EMA <small>10</small></span></td>
+                  @for (timeframe of timeframes; track timeframe) {
+                    <td>
+                      <span class="table-ema">
+                        <span
+                          class="ema-position"
+                          [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.ema10?.[timeframe])))"
+                          [attr.aria-label]="'Price ' + (bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.ema10?.[timeframe])) ?? 'position unavailable') + ' EMA 10'"
+                        >
+                          @switch (bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.ema10?.[timeframe]))) {
+                            @case ('below') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 9l5 5 5-5" /></svg> }
+                            @case ('above') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V2M3 7l5-5 5 5" /></svg> }
+                            @case ('at') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M9 3l5 5-5 5" /></svg> }
+                            @default { <span aria-hidden="true">—</span> }
+                          }
+                        </span>
+                        <span class="table-number">{{ formatPrice(latest(stock.ema10?.[timeframe])) }}</span>
+                      </span>
+                    </td>
+                  }
+                </tr>
+                <tr>
+                  <td><span class="table-indicator"><i class="dot ema55-dot"></i> EMA <small>55</small></span></td>
+                  @for (timeframe of timeframes; track timeframe) {
+                    <td>
+                      <span class="table-ema">
+                        <span
+                          class="ema-position"
+                          [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.ema55?.[timeframe])))"
+                          [attr.aria-label]="'Price ' + (bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.ema55?.[timeframe])) ?? 'position unavailable') + ' EMA 55'"
+                        >
+                          @switch (bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.ema55?.[timeframe]))) {
+                            @case ('below') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 9l5 5 5-5" /></svg> }
+                            @case ('above') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V2M3 7l5-5 5 5" /></svg> }
+                            @case ('at') { <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M9 3l5 5-5 5" /></svg> }
+                            @default { <span aria-hidden="true">—</span> }
+                          }
+                        </span>
+                        <span class="table-number">{{ formatPrice(latest(stock.ema55?.[timeframe])) }}</span>
+                      </span>
+                    </td>
+                  }
+                </tr>
+                <tr>
+                  <td><span class="table-indicator"><i class="dot bands-dot"></i> BBANDS <small>20, 2</small></span></td>
+                  @for (timeframe of timeframes; track timeframe) {
+                    <td>
+                      <span class="table-bands">
+                        <span class="table-band-reading">
+                          <span
+                            class="band-position"
+                            [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.bbands[timeframe])?.middle))"
+                            [attr.aria-label]="bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.bbands[timeframe])?.middle)"
+                          >
+                            @switch (bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.bbands[timeframe])?.middle)) {
+                              @case ('below') {
+                                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 9l5 5 5-5" /></svg>
+                              }
+                              @case ('above') {
+                                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V2M3 7l5-5 5 5" /></svg>
+                              }
+                              @case ('at') {
+                                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M9 3l5 5-5 5" /></svg>
+                              }
+                              @default { <span class="band-position-empty">—</span> }
+                            }
+                          </span>
+                          <span class="band-middle">{{ formatPrice(latest(stock.bbands[timeframe])?.middle) }}</span>
+                          <small
+                            class="band-streak"
+                            [style.color]="bbandsPositionColor(bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.bbands[timeframe])?.middle))"
+                          >
+                            {{ bbandsStreakLabel(bbandsStreakFor(stock, timeframe), bbandsPosition(latest(stock.prices[timeframe])?.close, latest(stock.bbands[timeframe])?.middle), timeframe) }}
+                          </small>
+                        </span>
+                      </span>
+                    </td>
+                  }
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="summary-footnote"><span>i</span> Each cell shows the most recent available reading for that interval.</div>
+        </div>
+      } @else {
+        <div class="chart-panel">
+          <div class="chart-toolbar">
+            <div class="chart-instrument">
+              <span class="toolbar-symbol">{{ stock.name }}</span>
+              <span class="toolbar-price">{{ formatPrice(latest(stock.prices[selectedTimeframe()])?.close) }}</span>
+              <span class="toolbar-date">{{ latestTimestamp(stock, selectedTimeframe()) }}</span>
+            </div>
+            <div class="timeframe-switcher" aria-label="Chart interval">
+              @for (timeframe of timeframes; track timeframe) {
+                <button [class.active]="selectedTimeframe() === timeframe" (click)="selectTimeframe(timeframe)">{{ timeframeLabel(timeframe) }}</button>
+              }
+            </div>
+          </div>
+
+          <div class="chart-legend">
+            <span><i class="legend-mark upper-mark"></i> BB upper</span>
+            <span><i class="legend-mark middle-mark"></i> BB basis</span>
+            <span><i class="legend-mark lower-mark"></i> BB lower</span>
+            <span><i class="legend-mark ema10-mark"></i> EMA 10</span>
+            <span><i class="legend-mark ema55-mark"></i> EMA 55</span>
+            <span class="ohlc-key"><i class="candle-up"></i> Up <i class="candle-down"></i> Down</span>
+          </div>
+
+          <div class="chart-area">
+            <div class="chart-section price-section">
+              <div class="chart-section-title"><span>PRICE</span><span>OHLC · BOLLINGER BANDS · EMA 10 / 55</span></div>
+              <div #priceChart class="chart-host price-chart" aria-label="Candlestick price chart with Bollinger Bands and EMA 10 and EMA 55"></div>
+            </div>
+            <div class="chart-section indicator-section">
+              <div class="chart-section-title"><span>RSI <small>14</small></span><span class="chart-value" [style.color]="rsiColor(latest(stock.rsi[selectedTimeframe()]))">{{ formatValue(latest(stock.rsi[selectedTimeframe()])) }}</span></div>
+              <div #rsiChart class="chart-host indicator-chart" aria-label="Relative Strength Index chart"></div>
+            </div>
+            <div class="chart-section indicator-section">
+              <div class="chart-section-title"><span>ADX <small>14</small></span><span class="chart-value" [style.color]="adxColor(latest(stock.adx[selectedTimeframe()]))">{{ formatValue(latest(stock.adx[selectedTimeframe()])) }}</span></div>
+              <div #adxChart class="chart-host indicator-chart last-chart" aria-label="Average Directional Index chart"></div>
+            </div>
+          </div>
+          <p class="chart-disclaimer">Candlestick prices and technical indicators are historical and not investment advice.</p>
+        </div>
+      }
+    </section>
+  </div>
+}
