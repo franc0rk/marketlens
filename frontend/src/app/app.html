@@ -377,18 +377,29 @@
           </div>
 
           <div class="chart-legend">
-            <span><i class="legend-mark upper-mark"></i> BB upper</span>
-            <span><i class="legend-mark middle-mark"></i> BB basis</span>
-            <span><i class="legend-mark lower-mark"></i> BB lower</span>
-            <span><i class="legend-mark ema10-mark"></i> EMA 10</span>
-            <span><i class="legend-mark ema55-mark"></i> EMA 55</span>
+            @if (priceOverlayMode() === 'bbands') {
+              <span><i class="legend-mark upper-mark"></i> BB upper</span>
+              <span><i class="legend-mark middle-mark"></i> BB basis</span>
+              <span><i class="legend-mark lower-mark"></i> BB lower</span>
+            } @else {
+              <span><i class="legend-mark ema10-mark"></i> EMA 10</span>
+              <span><i class="legend-mark ema55-mark"></i> EMA 55</span>
+            }
+            <span class="indicator-cycle-label" aria-label="Price indicators switch automatically every 5 seconds">AUTO · 5S</span>
             <span class="ohlc-key"><i class="candle-up"></i> Up <i class="candle-down"></i> Down</span>
           </div>
 
           <div class="chart-area">
             <div class="chart-section price-section">
-              <div class="chart-section-title"><span>PRICE</span><span>OHLC · BOLLINGER BANDS · EMA 10 / 55</span></div>
-              <div #priceChart class="chart-host price-chart" aria-label="Candlestick price chart with Bollinger Bands and EMA 10 and EMA 55"></div>
+              <div class="chart-section-title">
+                <span>PRICE</span>
+                <span>OHLC · {{ priceOverlayMode() === 'bbands' ? 'BOLLINGER BANDS' : 'EMA 10 / 55' }}</span>
+              </div>
+              <div
+                #priceChart
+                class="chart-host price-chart"
+                [attr.aria-label]="'Candlestick price chart with ' + (priceOverlayMode() === 'bbands' ? 'Bollinger Bands' : 'EMA 10 and EMA 55')"
+              ></div>
             </div>
             <div class="chart-section indicator-section">
               <div class="chart-section-title"><span>RSI <small>14</small></span><span class="chart-value" [style.color]="rsiColor(latest(stock.rsi[selectedTimeframe()]))">{{ formatValue(latest(stock.rsi[selectedTimeframe()])) }}</span></div>

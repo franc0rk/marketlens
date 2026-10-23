@@ -22,6 +22,7 @@ import {
 import { BollingerBands, PriceBar, Stock, StockDataService, Timeframe, TIMEFRAMES } from './stock-data';
 
 type AnalysisTab = 'summary' | 'chart';
+type PriceOverlayMode = 'bbands' | 'emas';
 type StockSortField =
   | 'name'
   | 'category'
@@ -98,6 +99,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   protected readonly selectedStock = signal<Stock | null>(null);
   protected readonly activeTab = signal<AnalysisTab>('summary');
   protected readonly selectedTimeframe = signal<Timeframe>('daily');
+  protected readonly priceOverlayMode = signal<PriceOverlayMode>('bbands');
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly refreshing = signal(false);
@@ -107,6 +109,8 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
 
   private chartApis: IChartApi[] = [];
   private resizeObserver?: ResizeObserver;
+  private indicatorRotationTimer?: number;
+  private updatePriceOverlayVisibility?: (mode: PriceOverlayMode) => void;
   private viewReady = false;
 
   constructor(private readonly stockData: StockDataService) {}
@@ -121,6 +125,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopIndicatorRotation();
     this.destroyCharts();
   }
 
@@ -209,6 +214,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected closeStock(): void {
+    this.stopIndicatorRotation();
     this.selectedStock.set(null);
     this.destroyCharts();
   }
@@ -216,8 +222,10 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   protected selectTab(tab: AnalysisTab): void {
     this.activeTab.set(tab);
     if (tab === 'chart') {
+      this.startIndicatorRotation();
       window.setTimeout(() => this.renderCharts(), 0);
     } else {
+      this.stopIndicatorRotation();
       this.destroyCharts();
     }
   }
@@ -628,11 +636,29 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       wickUpColor: '#39c98a',
       wickDownColor: '#f16b75',
     }).setData(candleData);
-    charts[0].addSeries(LineSeries, { color: '#e3ad59', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }).setData(upperBand);
-    charts[0].addSeries(LineSeries, { color: '#7e8799', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }).setData(middleBand);
-    charts[0].addSeries(LineSeries, { color: '#e3ad59', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }).setData(lowerBand);
-    charts[0].addSeries(LineSeries, { color: '#75c7f1', lineWidth: 2, lastValueVisible: false, priceLineVisible: false }).setData(ema10Data);
-    charts[0].addSeries(LineSeries, { color: '#c5a6f4', lineWidth: 2, lastValueVisible: false, priceLineVisible: false }).setData(ema55Data);
+    const bbandsSeries = [
+      charts[0].addSeries(LineSeries, { color: '#e3ad59', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+      charts[0].addSeries(LineSeries, { color: '#7e8799', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }),
+      charts[0].addSeries(LineSeries, { color: '#e3ad59', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+    ];
+    const emaSeries = [
+      charts[0].addSeries(LineSeries, { color: '#75c7f1', lineWidth: 2, lastValueVisible: false, priceLineVisible: false }),
+      charts[0].addSeries(LineSeries, { color: '#c5a6f4', lineWidth: 2, lastValueVisible: false, priceLineVisible: false }),
+    ];
+    bbandsSeries[0].setData(upperBand);
+    bbandsSeries[1].setData(middleBand);
+    bbandsSeries[2].setData(lowerBand);
+    emaSeries[0].setData(ema10Data);
+    emaSeries[1].setData(ema55Data);
+    this.updatePriceOverlayVisibility = (mode) => {
+      for (const series of bbandsSeries) {
+        series.applyOptions({ visible: mode === 'bbands' });
+      }
+      for (const series of emaSeries) {
+        series.applyOptions({ visible: mode === 'emas' });
+      }
+    };
+    this.updatePriceOverlayVisibility(this.priceOverlayMode());
     charts[1].addSeries(LineSeries, { color: '#b28af7', lineWidth: 2, lastValueVisible: true, priceLineVisible: false }).setData(rsiData);
     charts[2].addSeries(LineSeries, { color: '#53b5e8', lineWidth: 2, lastValueVisible: true, priceLineVisible: false }).setData(adxData);
 
@@ -742,9 +768,27 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   private destroyCharts(): void {
     this.resizeObserver?.disconnect();
     this.resizeObserver = undefined;
+    this.updatePriceOverlayVisibility = undefined;
     for (const chart of this.chartApis) {
       chart.remove();
     }
     this.chartApis = [];
+  }
+
+  private startIndicatorRotation(): void {
+    this.stopIndicatorRotation();
+    this.priceOverlayMode.set('bbands');
+    this.indicatorRotationTimer = window.setInterval(() => {
+      const nextMode = this.priceOverlayMode() === 'bbands' ? 'emas' : 'bbands';
+      this.priceOverlayMode.set(nextMode);
+      this.updatePriceOverlayVisibility?.(nextMode);
+    }, 5_000);
+  }
+
+  private stopIndicatorRotation(): void {
+    if (this.indicatorRotationTimer !== undefined) {
+      window.clearInterval(this.indicatorRotationTimer);
+      this.indicatorRotationTimer = undefined;
+    }
   }
 }

@@ -754,6 +754,7 @@ h1 > span:last-child {
 .lower-mark { background: #d79e50; }
 .ema10-mark { height: 3px; background: #75c7f1; }
 .ema55-mark { height: 3px; background: #c5a6f4; }
+.indicator-cycle-label { margin-left: auto; color: #a8e4ca; font-size: 7px; letter-spacing: 0.5px; }
 .summary-footnote { display: flex; align-items: center; gap: 8px; margin-top: 21px; color: #7c8898; font-size: 9px; }
 .summary-footnote > span { display: grid; width: 14px; height: 14px; place-items: center; border: 1px solid #465363; border-radius: 50%; color: #a8e4ca; font-size: 8px; }
 
