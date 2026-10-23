@@ -60,7 +60,9 @@
           <select [value]="categoryFilter()" (change)="setCategoryFilter($event)">
             <option value="">All categories</option>
             @for (category of categories(); track category) {
-              <option [value]="category">{{ category }}</option>
+              <option [value]="category" [selected]="categoryFilter() === category">
+                {{ category }}
+              </option>
             }
           </select>
         </label>
@@ -72,7 +74,9 @@
         <span>SORT BY</span>
         <select [value]="sortField()" (change)="setSortField($event)">
           @for (option of sortOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
+            <option [value]="option.value" [selected]="sortField() === option.value">
+              {{ option.label }}
+            </option>
           }
         </select>
       </label>

@@ -36,10 +36,13 @@ const stockDataMock = {
   refreshStocks: vi.fn(() => of({ stocks: [stock] })),
 };
 
-describe('App price indicator rotation', () => {
+const preferencesStorageKey = 'marketlens.stock-list-preferences';
+
+describe('App', () => {
   let fixture: ComponentFixture<App> | undefined;
 
   beforeEach(async () => {
+    localStorage.removeItem(preferencesStorageKey);
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [{ provide: StockDataService, useValue: stockDataMock }],
@@ -50,7 +53,75 @@ describe('App price indicator rotation', () => {
     fixture?.destroy();
     fixture = undefined;
     vi.useRealTimers();
+    localStorage.removeItem(preferencesStorageKey);
     TestBed.resetTestingModule();
+  });
+
+  it('persists and restores stock list filters and sorting', () => {
+    fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+
+    const nameInput = page.querySelector<HTMLInputElement>('input[type="search"]');
+    const categorySelect = page.querySelector<HTMLSelectElement>(
+      '.filter-controls select',
+    );
+    const sortSelect = page.querySelector<HTMLSelectElement>('.sort-field select');
+    if (!nameInput || !categorySelect || !sortSelect) {
+      throw new Error('Could not find the stock list preference controls.');
+    }
+
+    nameInput.value = 'test';
+    nameInput.dispatchEvent(new Event('input'));
+    categorySelect.value = 'Test';
+    categorySelect.dispatchEvent(new Event('change'));
+    sortSelect.value = 'price';
+    sortSelect.dispatchEvent(new Event('change'));
+
+    expect(localStorage.getItem(preferencesStorageKey)).toBe(
+      JSON.stringify({
+        nameFilter: 'test',
+        categoryFilter: 'Test',
+        sortField: 'price',
+      }),
+    );
+
+    fixture.destroy();
+    fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const restoredPage = fixture.nativeElement as HTMLElement;
+    expect(restoredPage.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe(
+      'test',
+    );
+    expect(
+      restoredPage.querySelector<HTMLSelectElement>('.filter-controls select')?.value,
+    ).toBe('Test');
+    expect(
+      restoredPage.querySelector<HTMLSelectElement>('.sort-field select')?.value,
+    ).toBe('price');
+  });
+
+  it('clears stored filters without resetting the selected sort', () => {
+    localStorage.setItem(
+      preferencesStorageKey,
+      JSON.stringify({
+        nameFilter: 'test',
+        categoryFilter: 'Test',
+        sortField: 'price',
+      }),
+    );
+    fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    clickButton(page, '.clear-filters-button');
+
+    expect(localStorage.getItem(preferencesStorageKey)).toBe(
+      JSON.stringify({
+        nameFilter: '',
+        categoryFilter: '',
+        sortField: 'price',
+      }),
+    );
   });
 
   it('alternates between Bollinger Bands and EMAs every five seconds in the chart tab', () => {

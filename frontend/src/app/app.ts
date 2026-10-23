@@ -31,6 +31,12 @@ type StockSortField =
   | 'adx'
   | 'bbandsStreak';
 
+interface StockListPreferences {
+  nameFilter: string;
+  categoryFilter: string;
+  sortField: StockSortField;
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.html',
@@ -112,10 +118,12 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   private indicatorRotationTimer?: number;
   private updatePriceOverlayVisibility?: (mode: PriceOverlayMode) => void;
   private viewReady = false;
+  private readonly preferencesStorageKey = 'marketlens.stock-list-preferences';
 
   constructor(private readonly stockData: StockDataService) {}
 
   ngOnInit(): void {
+    this.loadPreferences();
     this.loadStocks();
     this.loadExchangeRate();
   }
@@ -161,6 +169,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     const input = event.target;
     if (input instanceof HTMLInputElement) {
       this.nameFilter.set(input.value);
+      this.savePreferences();
     }
   }
 
@@ -168,6 +177,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     const select = event.target;
     if (select instanceof HTMLSelectElement) {
       this.categoryFilter.set(select.value);
+      this.savePreferences();
     }
   }
 
@@ -177,6 +187,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       const option = this.sortOptions.find(({ value }) => value === select.value);
       if (option) {
         this.sortField.set(option.value);
+        this.savePreferences();
       }
     }
   }
@@ -184,6 +195,51 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   protected clearFilters(): void {
     this.nameFilter.set('');
     this.categoryFilter.set('');
+    this.savePreferences();
+  }
+
+  private loadPreferences(): void {
+    const storedPreferences = localStorage.getItem(this.preferencesStorageKey);
+    if (!storedPreferences) {
+      return;
+    }
+
+    try {
+      const preferences: unknown = JSON.parse(storedPreferences);
+      if (
+        typeof preferences !== 'object' ||
+        preferences === null ||
+        !('nameFilter' in preferences) ||
+        typeof preferences.nameFilter !== 'string' ||
+        !('categoryFilter' in preferences) ||
+        typeof preferences.categoryFilter !== 'string' ||
+        !('sortField' in preferences)
+      ) {
+        throw new Error('Stored stock list preferences have an invalid format.');
+      }
+
+      const sortOption = this.sortOptions.find(
+        ({ value }) => value === preferences.sortField,
+      );
+      if (!sortOption) {
+        throw new Error('Stored stock list preferences contain an invalid sort field.');
+      }
+
+      this.nameFilter.set(preferences.nameFilter);
+      this.categoryFilter.set(preferences.categoryFilter);
+      this.sortField.set(sortOption.value);
+    } catch (error) {
+      console.warn('Could not restore stock list preferences from local storage.', error);
+    }
+  }
+
+  private savePreferences(): void {
+    const preferences: StockListPreferences = {
+      nameFilter: this.nameFilter(),
+      categoryFilter: this.categoryFilter(),
+      sortField: this.sortField(),
+    };
+    localStorage.setItem(this.preferencesStorageKey, JSON.stringify(preferences));
   }
 
   private stockSortValue(stock: Stock, field: StockSortField): number | string | null {
