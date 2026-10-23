@@ -27,6 +27,18 @@ or production use.
 
 ## Quick start
 
+### Run both servers
+
+After installing the dependencies below, start the API and frontend together
+from the project root:
+
+```bash
+./run.sh
+```
+
+Open [http://localhost:4200](http://localhost:4200). Press **Ctrl+C** to stop
+both servers.
+
 ### Requirements
 
 - Python 3.10 or newer
