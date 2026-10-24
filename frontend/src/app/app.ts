@@ -169,9 +169,19 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
       return {
         stock,
         price,
-        balanceShares: sharesAffordable(balances.totalBalanceUsd, price),
-        gbmShares: sharesAffordable(balances.gbmLiquidityUsd * allocation, price),
-        binanceShares: sharesAffordable(balances.binanceLiquidityUsd * allocation, price),
+        balanceShares: sharesAffordable(
+          balances.totalBalanceUsd,
+          price,
+          this.isCrypto,
+        ),
+        gbmShares: this.isCrypto
+          ? null
+          : sharesAffordable(balances.gbmLiquidityUsd * allocation, price),
+        binanceShares: sharesAffordable(
+          balances.binanceLiquidityUsd * allocation,
+          price,
+          this.isCrypto,
+        ),
       };
     });
     const field = this.balanceSortField();
@@ -326,9 +336,11 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   }
 
   protected formatShareCount(value: number | null): string {
-    return value === null
-      ? '—'
-      : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
+    if (value === null) {
+      return '—';
+    }
+    const maximumFractionDigits = this.isCrypto ? 2 : 0;
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits }).format(value);
   }
 
   protected toggleBalanceSort(field: BalanceSortField): void {

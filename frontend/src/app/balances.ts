@@ -50,7 +50,11 @@ export function parseAccountBalances(contents: string): AccountBalances {
   };
 }
 
-export function sharesAffordable(budgetUsd: number, priceUsd: number | null | undefined): number | null {
+export function sharesAffordable(
+  budgetUsd: number,
+  priceUsd: number | null | undefined,
+  allowFractionalUnits = false,
+): number | null {
   if (
     !Number.isFinite(budgetUsd) ||
     budgetUsd < 0 ||
@@ -60,7 +64,9 @@ export function sharesAffordable(budgetUsd: number, priceUsd: number | null | un
   ) {
     return null;
   }
-  return Math.floor(budgetUsd / priceUsd);
+
+  const affordable = budgetUsd / priceUsd;
+  return allowFractionalUnits ? Number(affordable.toFixed(4)) : Math.floor(affordable);
 }
 
 function isNonNegativeNumber(value: unknown): value is number {

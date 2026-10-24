@@ -831,6 +831,10 @@ h1 > span:last-child {
   gap: 12px;
 }
 
+.balance-summary.crypto-balance-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .balance-summary > div {
   display: flex;
   min-height: 74px;
