@@ -21,6 +21,12 @@
       <p class="intro-copy">A focused view of price action and momentum across {{ isCrypto ? 'digital assets' : 'the stock market' }}.</p>
     </div>
     <div class="intro-actions">
+      @if (!isCrypto) {
+        <button class="import-balances-button" (click)="openBalanceImport()">
+          <span aria-hidden="true">⇧</span>
+          Import balances
+        </button>
+      }
       <button class="refresh-all-button" (click)="refreshAll()" [disabled]="loading() || refreshing()">
         <span aria-hidden="true">↻</span>
         {{ refreshing() && !refreshingTicker() ? 'Refreshing…' : 'Refresh all' }}
@@ -246,6 +252,134 @@
     <span>INDICATORS ARE FOR INFORMATIONAL PURPOSES ONLY</span>
   </footer>
 </main>
+
+@if (balanceImportOpen()) {
+  <div class="modal-backdrop" (click)="closeBalanceImport()" (keydown.escape)="closeBalanceImport()">
+    <section
+      class="balance-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="balance-modal-title"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <div>
+          <p class="eyebrow">PORTFOLIO TOOLS</p>
+          <h2 id="balance-modal-title">Import balances</h2>
+          <p class="balance-modal-subtitle">Estimate whole shares available for each stock.</p>
+        </div>
+        <button class="close-button" aria-label="Close balance import" (click)="closeBalanceImport()">×</button>
+      </header>
+      <div class="balance-modal-content">
+        @if (!importedBalances()) {
+          <label
+            class="balance-dropzone"
+            [class.is-scanning]="balanceScanActive()"
+            (dragover)="allowBalanceFileDrop($event)"
+            (drop)="onBalanceFileDrop($event)"
+          >
+            <input
+              type="file"
+              accept=".json,application/json"
+              [disabled]="balanceScanActive()"
+              (change)="onBalanceFileSelected($event)"
+            />
+            @if (balanceScanActive()) {
+              <span class="balance-scanner" aria-hidden="true"></span>
+              <strong>Scanning {{ balanceFileName() }}…</strong>
+              <span>Reading account balance and platform liquidity</span>
+            } @else {
+              <span class="upload-icon" aria-hidden="true">⇧</span>
+              <strong>Drop your export.json file here</strong>
+              <span>or click to browse · JSON files only</span>
+            }
+          </label>
+          @if (balanceImportError()) {
+            <p class="balance-import-error" role="alert">{{ balanceImportError() }}</p>
+          }
+        } @else {
+          <div class="balance-summary">
+            <div>
+              <span>ACCOUNT BALANCE</span>
+              <strong>{{ formatPrice(importedBalances()?.totalBalanceUsd) }} USD</strong>
+            </div>
+            <div>
+              <span>GBM LIQUIDITY</span>
+              <strong>{{ formatPrice(importedBalances()?.gbmLiquidityUsd) }} USD</strong>
+            </div>
+            <div>
+              <span>BINANCE LIQUIDITY</span>
+              <strong>{{ formatPrice(importedBalances()?.binanceLiquidityUsd) }} USD</strong>
+            </div>
+          </div>
+          <p class="balance-file-label">Imported from {{ balanceFileName() }} · {{ balanceRows().length }} stocks shown</p>
+          <div class="balance-table-wrap">
+            <table class="balance-table">
+              <thead>
+                <tr>
+                  <th [attr.aria-sort]="balanceSortField() === 'name' ? (balanceSortDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                    <button class="balance-sort-button" (click)="toggleBalanceSort('name')">
+                      STOCK <span aria-hidden="true">{{ balanceSortIndicator('name') }}</span>
+                    </button>
+                  </th>
+                  <th [attr.aria-sort]="balanceSortField() === 'price' ? (balanceSortDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                    <button class="balance-sort-button" (click)="toggleBalanceSort('price')">
+                      PRICE (USD) <span aria-hidden="true">{{ balanceSortIndicator('price') }}</span>
+                    </button>
+                  </th>
+                  <th [attr.aria-sort]="balanceSortField() === 'balanceShares' ? (balanceSortDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                    <button class="balance-sort-button" (click)="toggleBalanceSort('balanceShares')">
+                      WITH ACCOUNT BALANCE <span aria-hidden="true">{{ balanceSortIndicator('balanceShares') }}</span>
+                    </button>
+                  </th>
+                  <th [attr.aria-sort]="balanceSortField() === 'gbmShares' ? (balanceSortDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                    <button class="balance-sort-button" (click)="toggleBalanceSort('gbmShares')">
+                      WITH GBM LIQUIDITY <span aria-hidden="true">{{ balanceSortIndicator('gbmShares') }}</span>
+                    </button>
+                  </th>
+                  <th [attr.aria-sort]="balanceSortField() === 'binanceShares' ? (balanceSortDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                    <button class="balance-sort-button" (click)="toggleBalanceSort('binanceShares')">
+                      WITH BINANCE LIQUIDITY <span aria-hidden="true">{{ balanceSortIndicator('binanceShares') }}</span>
+                    </button>
+                  </th>
+                  <th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of balanceRows(); track row.stock.name) {
+                  <tr>
+                    <td class="balance-stock-name">{{ row.stock.name }}</td>
+                    <td>{{ formatPrice(row.price) }}</td>
+                    <td>{{ formatShareCount(row.balanceShares) }}</td>
+                    <td>{{ formatShareCount(row.gbmShares) }}</td>
+                    <td>{{ formatShareCount(row.binanceShares) }}</td>
+                    <td>
+                      <div class="allocation-buttons" [attr.aria-label]="'Liquidity allocation for ' + row.stock.name">
+                        @for (option of allocationOptions; track option.value) {
+                          <button
+                            type="button"
+                            class="allocation-button"
+                            [class.active]="isRowAllocationSelected(row.stock.name, option.value)"
+                            [attr.aria-pressed]="isRowAllocationSelected(row.stock.name, option.value)"
+                            [attr.aria-label]="option.label + ' of GBM and Binance liquidity for ' + row.stock.name"
+                            (click)="toggleRowAllocation(row.stock.name, option.value)"
+                          >{{ option.label }}</button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6" class="balance-empty">No stocks match the current filters.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="balance-disclaimer">Estimates use the latest displayed price and do not include fees or taxes.</p>
+        }
+      </div>
+    </section>
+  </div>
+}
 
 @if (selectedStock(); as stock) {
   <div class="modal-backdrop" (click)="closeStock()" (keydown.escape)="closeStock()">

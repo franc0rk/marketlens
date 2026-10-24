@@ -140,6 +140,132 @@ describe('App', () => {
     );
   });
 
+  it('imports account balances and shows purchasable shares for the displayed stocks', async () => {
+    const pricedStock: Stock = {
+      ...stock,
+      prices: {
+        ...emptyTimeframes<Stock['prices']['daily'][number]>(),
+        daily: [{ open: 125, high: 125, low: 125, close: 125, volume: 1 }],
+      },
+    };
+    const otherPricedStock: Stock = {
+      ...pricedStock,
+      name: 'ALT',
+      prices: {
+        ...emptyTimeframes<Stock['prices']['daily'][number]>(),
+        daily: [{ open: 200, high: 200, low: 200, close: 200, volume: 1 }],
+      },
+    };
+    stockDataMock.getMarketAssets.mockReturnValueOnce(
+      of({ stocks: [pricedStock, otherPricedStock] }),
+    );
+    vi.useFakeTimers();
+    fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+
+    clickButton(page, '.import-balances-button');
+    fixture.detectChanges();
+    expect(page.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Drop your export.json file here',
+    );
+
+    const file = new File(
+      [
+        JSON.stringify({
+          totalBalanceUsd: 1_000,
+          positions: [
+            { group: 'bonds', platform: 'gbm', currentValueUsd: 1_250 },
+            { group: 'bonds', platform: 'binance', currentValueUsd: 625 },
+            { group: 'crypto', currentValueUsd: 9_000 },
+          ],
+        }),
+      ],
+      'export.json',
+      { type: 'application/json' },
+    );
+    Object.defineProperty(file, 'text', {
+      value: () =>
+        Promise.resolve(
+          JSON.stringify({
+            totalBalanceUsd: 1_000,
+            positions: [
+              { group: 'bonds', platform: 'gbm', currentValueUsd: 1_250 },
+              { group: 'bonds', platform: 'binance', currentValueUsd: 625 },
+              { group: 'crypto', currentValueUsd: 9_000 },
+            ],
+          }),
+        ),
+    });
+    const dropzone = page.querySelector('.balance-dropzone');
+    if (!dropzone) {
+      throw new Error('Could not find the balance import dropzone.');
+    }
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: { files: [file] },
+    });
+    dropzone.dispatchEvent(dropEvent);
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(page.querySelector('.balance-dropzone')?.textContent).toContain(
+      'Scanning export.json',
+    );
+    vi.advanceTimersByTime(1_200);
+    fixture.detectChanges();
+
+    const rows = page.querySelectorAll('.balance-table tbody tr');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelectorAll('td')[0]?.textContent?.trim()).toBe('ALT');
+    expect(rows[0]?.querySelectorAll('td')[2]?.textContent?.trim()).toBe('5');
+    expect(rows[1]?.querySelectorAll('td')[0]?.textContent?.trim()).toBe('TEST');
+    expect(rows[1]?.querySelectorAll('td')[2]?.textContent?.trim()).toBe('8');
+    expect(rows[1]?.querySelectorAll('td')[3]?.textContent?.trim()).toBe('10');
+    expect(rows[1]?.querySelectorAll('td')[4]?.textContent?.trim()).toBe('5');
+    expect(rows[1]?.querySelectorAll('td')[5]?.querySelectorAll('button')).toHaveLength(3);
+    expect(page.querySelector('.balance-table thead')?.textContent).toContain('WITH GBM LIQUIDITY');
+    expect(page.querySelector('.balance-table thead')?.textContent).toContain('WITH BINANCE LIQUIDITY');
+    expect(page.querySelector('.balance-table thead')?.textContent).not.toContain('BONDS LIQUIDITY');
+    expect(page.querySelector('.balance-table thead')?.textContent).toContain('ACTIONS');
+    expect(page.querySelector('.balance-summary')?.textContent).toContain('$1,000.00');
+    expect(page.querySelector('.balance-summary')?.textContent).toContain('$1,250.00');
+    expect(page.querySelector('.balance-summary')?.textContent).toContain('$625.00');
+
+    const testActionCell = page.querySelectorAll('.balance-table tbody tr')[1]?.querySelectorAll('td')[5];
+    const allocationButtons = testActionCell?.querySelectorAll<HTMLButtonElement>('button');
+    allocationButtons?.[1]?.click();
+    fixture.detectChanges();
+    let updatedTestCells = page.querySelectorAll('.balance-table tbody tr')[1]?.querySelectorAll('td');
+    expect(updatedTestCells?.[3]?.textContent?.trim()).toBe('2');
+    expect(updatedTestCells?.[4]?.textContent?.trim()).toBe('1');
+    expect(allocationButtons?.[1]?.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      page.querySelectorAll('.balance-table tbody tr')[0]?.querySelectorAll('td')[3]?.textContent?.trim(),
+    ).toBe('6');
+    allocationButtons?.[2]?.click();
+    fixture.detectChanges();
+    updatedTestCells = page.querySelectorAll('.balance-table tbody tr')[1]?.querySelectorAll('td');
+    expect(updatedTestCells?.[3]?.textContent?.trim()).toBe('1');
+    expect(updatedTestCells?.[4]?.textContent?.trim()).toBe('0');
+    allocationButtons?.[2]?.click();
+    fixture.detectChanges();
+    updatedTestCells = page.querySelectorAll('.balance-table tbody tr')[1]?.querySelectorAll('td');
+    expect(updatedTestCells?.[3]?.textContent?.trim()).toBe('10');
+    expect(updatedTestCells?.[4]?.textContent?.trim()).toBe('5');
+
+    clickButton(page, '.balance-table th:nth-child(3) button');
+    fixture.detectChanges();
+    expect(
+      page.querySelector('.balance-table tbody tr:first-child td:first-child')?.textContent?.trim(),
+    ).toBe('ALT');
+    clickButton(page, '.balance-table th:nth-child(3) button');
+    fixture.detectChanges();
+    expect(
+      page.querySelector('.balance-table tbody tr:first-child td:first-child')?.textContent?.trim(),
+    ).toBe('TEST');
+  });
+
   it('alternates between Bollinger Bands and EMAs every five seconds in the chart tab', () => {
     vi.useFakeTimers();
     fixture = TestBed.createComponent(App);

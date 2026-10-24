@@ -15,6 +15,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { EMPTY, Subscription, timer } from 'rxjs';
 import { catchError, exhaustMap, tap } from 'rxjs/operators';
+import { AccountBalances, parseAccountBalances, sharesAffordable } from './balances';
 import {
   CandlestickData,
   CandlestickSeries,
@@ -50,6 +51,15 @@ interface StockListPreferences {
   categoryFilter: string;
   sortField: StockSortField;
 }
+
+type BalanceSortField =
+  | 'name'
+  | 'price'
+  | 'balanceShares'
+  | 'gbmShares'
+  | 'binanceShares';
+type SortDirection = 'asc' | 'desc';
+type AllocationPercentage = 0.5 | 0.2 | 0.1;
 
 @Component({
   selector: 'app-market-page',
@@ -131,10 +141,67 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   protected readonly refreshingTicker = signal<string | null>(null);
   protected readonly refreshError = signal('');
   protected readonly timeframes = TIMEFRAMES;
+  protected readonly balanceImportOpen = signal(false);
+  protected readonly balanceScanActive = signal(false);
+  protected readonly balanceImportError = signal('');
+  protected readonly balanceFileName = signal('');
+  protected readonly importedBalances = signal<AccountBalances | null>(null);
+  protected readonly rowAllocations = signal<Record<string, AllocationPercentage>>({});
+  protected readonly allocationOptions: {
+    value: AllocationPercentage;
+    label: string;
+  }[] = [
+    { value: 0.5, label: '50%' },
+    { value: 0.2, label: '20%' },
+    { value: 0.1, label: '10%' },
+  ];
+  protected readonly balanceSortField = signal<BalanceSortField>('name');
+  protected readonly balanceSortDirection = signal<SortDirection>('asc');
+  protected readonly balanceRows = computed(() => {
+    const balances = this.importedBalances();
+    if (!balances) {
+      return [];
+    }
+    const allocations = this.rowAllocations();
+    const rows = this.filteredStocks().map((stock) => {
+      const price = this.displayPrice(stock);
+      const allocation = allocations[stock.name] ?? 1;
+      return {
+        stock,
+        price,
+        balanceShares: sharesAffordable(balances.totalBalanceUsd, price),
+        gbmShares: sharesAffordable(balances.gbmLiquidityUsd * allocation, price),
+        binanceShares: sharesAffordable(balances.binanceLiquidityUsd * allocation, price),
+      };
+    });
+    const field = this.balanceSortField();
+    const direction = this.balanceSortDirection() === 'asc' ? 1 : -1;
+    return rows.sort((left, right) => {
+      if (field === 'name') {
+        return direction * left.stock.name.localeCompare(right.stock.name, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
+      }
+      const leftValue = left[field];
+      const rightValue = right[field];
+      if (leftValue == null) {
+        return rightValue == null
+          ? left.stock.name.localeCompare(right.stock.name)
+          : 1;
+      }
+      if (rightValue == null) {
+        return -1;
+      }
+      return direction * (leftValue - rightValue) ||
+        left.stock.name.localeCompare(right.stock.name);
+    });
+  });
 
   private chartApis: IChartApi[] = [];
   private resizeObserver?: ResizeObserver;
   private indicatorRotationTimer?: number;
+  private balanceScanTimer?: number;
   private updatePriceOverlayVisibility?: (mode: PriceOverlayMode) => void;
   private viewReady = false;
   private initialized = false;
@@ -156,6 +223,7 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (this.initialized && changes['market'] && !changes['market'].firstChange) {
       this.closeStock();
+      this.closeBalanceImport();
       this.nameFilter.set('');
       this.categoryFilter.set('');
       this.sortField.set('name');
@@ -187,12 +255,17 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.pricePoll?.unsubscribe();
     this.stopIndicatorRotation();
+    this.clearBalanceScanTimer();
     this.destroyCharts();
   }
 
   @HostListener('document:keydown.escape')
   protected onEscape(): void {
-    this.closeStock();
+    if (this.balanceImportOpen()) {
+      this.closeBalanceImport();
+    } else {
+      this.closeStock();
+    }
   }
 
   protected loadStocks(): void {
@@ -212,6 +285,89 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
 
   protected refreshAll(): void {
     this.refreshStocks();
+  }
+
+  protected openBalanceImport(): void {
+    this.balanceImportOpen.set(true);
+  }
+
+  protected closeBalanceImport(): void {
+    this.clearBalanceScanTimer();
+    this.balanceImportOpen.set(false);
+    this.balanceScanActive.set(false);
+    this.balanceImportError.set('');
+    this.balanceFileName.set('');
+    this.importedBalances.set(null);
+    this.rowAllocations.set({});
+  }
+
+  protected onBalanceFileSelected(event: Event): void {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) {
+      void this.importBalanceFile(file);
+    }
+  }
+
+  protected onBalanceFileDrop(event: DragEvent): void {
+    event.preventDefault();
+    const file = event.dataTransfer?.files[0];
+    if (file) {
+      void this.importBalanceFile(file);
+    }
+  }
+
+  protected allowBalanceFileDrop(event: DragEvent): void {
+    event.preventDefault();
+  }
+
+  protected formatShareCount(value: number | null): string {
+    return value === null
+      ? '—'
+      : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
+  }
+
+  protected toggleBalanceSort(field: BalanceSortField): void {
+    if (this.balanceSortField() === field) {
+      this.balanceSortDirection.set(
+        this.balanceSortDirection() === 'asc' ? 'desc' : 'asc',
+      );
+      return;
+    }
+    this.balanceSortField.set(field);
+    this.balanceSortDirection.set('asc');
+  }
+
+  protected balanceSortIndicator(field: BalanceSortField): string {
+    if (this.balanceSortField() !== field) {
+      return '↕';
+    }
+    return this.balanceSortDirection() === 'asc' ? '↑' : '↓';
+  }
+
+  protected toggleRowAllocation(
+    stockName: string,
+    allocation: AllocationPercentage,
+  ): void {
+    const currentAllocations = this.rowAllocations();
+    if (currentAllocations[stockName] === allocation) {
+      const remainingAllocations = { ...currentAllocations };
+      delete remainingAllocations[stockName];
+      this.rowAllocations.set(remainingAllocations);
+      return;
+    }
+    this.rowAllocations.set({ ...currentAllocations, [stockName]: allocation });
+  }
+
+  protected isRowAllocationSelected(
+    stockName: string,
+    allocation: AllocationPercentage,
+  ): boolean {
+    return this.rowAllocations()[stockName] === allocation;
   }
 
   protected refreshTicker(symbol: string): void {
@@ -671,6 +827,37 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
         this.refreshingTicker.set(null);
       },
     });
+  }
+
+  private async importBalanceFile(file: File): Promise<void> {
+    if (this.balanceScanActive()) {
+      return;
+    }
+    this.clearBalanceScanTimer();
+    this.balanceImportError.set('');
+    this.importedBalances.set(null);
+    this.balanceFileName.set(file.name);
+    this.balanceScanActive.set(true);
+    try {
+      const balances = parseAccountBalances(await file.text());
+      this.balanceScanTimer = window.setTimeout(() => {
+        this.importedBalances.set(balances);
+        this.balanceScanActive.set(false);
+        this.balanceScanTimer = undefined;
+      }, 1_200);
+    } catch (error: unknown) {
+      this.balanceScanActive.set(false);
+      this.balanceImportError.set(
+        error instanceof Error ? error.message : 'Could not read the selected file.',
+      );
+    }
+  }
+
+  private clearBalanceScanTimer(): void {
+    if (this.balanceScanTimer !== undefined) {
+      window.clearTimeout(this.balanceScanTimer);
+      this.balanceScanTimer = undefined;
+    }
   }
 
   private startPricePolling(): void {

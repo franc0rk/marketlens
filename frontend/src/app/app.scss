@@ -197,6 +197,34 @@ h1 > span:last-child {
   font-size: 16px;
 }
 
+.import-balances-button {
+  display: inline-flex;
+  min-height: 43px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #303a47;
+  border-radius: 8px;
+  background: #151c25;
+  color: #c5cfdb;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.import-balances-button:hover {
+  border-color: #596879;
+  background: #1b2530;
+  color: #edf2f8;
+}
+
+.import-balances-button > span {
+  color: #a8e4ca;
+  font-size: 16px;
+}
+
 .date-range {
   margin-top: 4px;
   color: #b9c2cf;
@@ -689,6 +717,275 @@ h1 > span:last-child {
   scrollbar-color: #3c4857 #10161e;
 }
 
+.balance-modal {
+  width: min(1000px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: auto;
+  border: 1px solid #303a47;
+  border-radius: 13px;
+  background: #10161e;
+  box-shadow: 0 28px 90px #0009;
+  scrollbar-color: #3c4857 #10161e;
+}
+
+.balance-modal .modal-header h2 {
+  margin: 0;
+  color: #edf2f8;
+  font-size: 20px;
+  letter-spacing: -0.5px;
+}
+
+.balance-modal .modal-header .eyebrow {
+  margin-bottom: 7px;
+}
+
+.balance-modal-subtitle {
+  margin: 6px 0 0;
+  color: #8591a1;
+  font-size: 11px;
+}
+
+.balance-modal-content {
+  padding: 0 24px 24px;
+}
+
+.balance-dropzone {
+  position: relative;
+  display: flex;
+  min-height: 200px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  overflow: hidden;
+  border: 1px dashed #465565;
+  border-radius: 10px;
+  background: #121a23;
+  color: #8491a2;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.balance-dropzone:hover,
+.balance-dropzone:focus-within {
+  border-color: #8ab9a3;
+  background: #16231f;
+}
+
+.balance-dropzone.is-scanning {
+  border-color: #547c68;
+  background: #14201d;
+  cursor: wait;
+}
+
+.balance-dropzone input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.balance-dropzone strong {
+  color: #dce5ef;
+  font-size: 13px;
+}
+
+.balance-dropzone > span:not(.balance-scanner):not(.upload-icon) {
+  font-size: 10px;
+}
+
+.upload-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #365244;
+  border-radius: 11px;
+  background: #1a2b24;
+  color: #a8e4ca;
+  font-size: 20px;
+}
+
+.balance-scanner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #37434e;
+  border-top-color: #a8e4ca;
+  border-right-color: #a8e4ca;
+  border-radius: 50%;
+  animation: spin 750ms linear infinite;
+}
+
+.balance-import-error {
+  margin: 12px 0 0;
+  color: #f19ba4;
+  font-size: 11px;
+}
+
+.balance-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.balance-summary > div {
+  display: flex;
+  min-height: 74px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 15px;
+  border: 1px solid #29333f;
+  border-radius: 8px;
+  background: #131a23;
+}
+
+.balance-summary span {
+  color: #8491a2;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.balance-summary strong {
+  color: #dce5ef;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-file-label,
+.balance-disclaimer {
+  color: #7f8b9b;
+  font-size: 9px;
+}
+
+.balance-file-label {
+  margin: 16px 0 9px;
+}
+
+.balance-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #27313c;
+  border-radius: 8px;
+}
+
+.balance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.balance-table th,
+.balance-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #252e39;
+  white-space: nowrap;
+}
+
+.balance-table th {
+  background: #151c25;
+  color: #7f8b9b;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.balance-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.balance-sort-button:hover,
+.balance-sort-button:focus-visible {
+  color: #c9d4e0;
+}
+
+.balance-sort-button:focus-visible {
+  outline: 1px solid #a8e4ca;
+  outline-offset: 3px;
+}
+
+.balance-sort-button span {
+  color: #a8e4ca;
+  font-size: 10px;
+}
+
+.balance-table td {
+  color: #cbd4df;
+  font-size: 10px;
+}
+
+.allocation-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.allocation-button {
+  min-width: 39px;
+  padding: 5px 6px;
+  border: 1px solid #303a47;
+  border-radius: 5px;
+  background: #151c25;
+  color: #9aa6b6;
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.allocation-button:hover {
+  border-color: #658271;
+  color: #dce5ef;
+}
+
+.allocation-button.active {
+  border-color: #6e9d83;
+  background: #1a3028;
+  color: #b5e8d0;
+}
+
+.allocation-button:focus-visible {
+  outline: 1px solid #a8e4ca;
+  outline-offset: 2px;
+}
+
+.balance-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.balance-table th:first-child,
+.balance-table td:first-child {
+  text-align: left;
+}
+
+.balance-table .balance-stock-name {
+  color: #e3eaf2;
+  font-weight: 650;
+}
+
+.balance-empty {
+  padding: 24px !important;
+  color: #8793a3 !important;
+  text-align: center !important;
+}
+
+.balance-disclaimer {
+  margin: 11px 0 0;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -799,6 +1096,7 @@ h1 > span:last-child {
   .market-navigation { gap: 4px; }
   .intro { align-items: flex-start; flex-direction: column; padding: 34px 0 22px; }
   .intro-actions { width: 100%; justify-content: space-between; }
+  .intro-actions { flex-wrap: wrap; }
   .filter-bar { align-items: stretch; flex-direction: column; gap: 12px; }
   .filter-controls { align-items: stretch; flex-direction: column; gap: 10px; }
   .filter-field { min-width: 0; }
@@ -811,6 +1109,10 @@ h1 > span:last-child {
   .page-footer { gap: 8px; flex-direction: column; font-size: 7px; }
   .modal-backdrop { padding: 10px; }
   .analysis-modal { max-height: calc(100vh - 20px); }
+  .balance-modal { max-height: calc(100vh - 20px); }
+  .balance-modal .modal-header { padding: 16px; }
+  .balance-modal-content { padding: 0 16px 16px; }
+  .balance-summary { grid-template-columns: 1fr; gap: 8px; }
   .modal-header { padding: 16px; }
   .modal-tabs { padding: 0 16px; }
   .summary-panel { padding: 20px 14px; }
