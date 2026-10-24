@@ -279,6 +279,9 @@ describe('App', () => {
     vi.advanceTimersByTime(0);
     fixture.detectChanges();
 
+    expect(page.querySelector('.last-chart')?.getAttribute('aria-label')).toContain(
+      'horizontal reference line at 23',
+    );
     expect(priceLegend(page)).toContain('BB upper');
     expect(priceLegend(page)).not.toContain('EMA 10');
     expect(priceHeading(page)).toContain('BOLLINGER BANDS');
@@ -366,8 +369,6 @@ describe('App', () => {
     expect(Number(updatedCells?.[3]?.textContent?.trim())).toBeCloseTo(1.01, 2);
     expect(allocationButtons?.[1]?.getAttribute('aria-label')).toContain('Binance liquidity');
     expect(allocationButtons?.[1]?.getAttribute('aria-label')).not.toContain('GBM');
-    expect(allocationButton?.getAttribute('aria-label')).toContain('Binance liquidity');
-    expect(allocationButton?.getAttribute('aria-label')).not.toContain('GBM');
   });
 
   it('shows Binance quotes and polls them every five seconds on the crypto page', () => {

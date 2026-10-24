@@ -1010,7 +1010,21 @@ export class App implements OnInit, OnChanges, AfterViewInit, OnDestroy {
     };
     this.updatePriceOverlayVisibility(this.priceOverlayMode());
     charts[1].addSeries(LineSeries, { color: '#b28af7', lineWidth: 2, lastValueVisible: true, priceLineVisible: false }).setData(rsiData);
-    charts[2].addSeries(LineSeries, { color: '#53b5e8', lineWidth: 2, lastValueVisible: true, priceLineVisible: false }).setData(adxData);
+    const adxSeries = charts[2].addSeries(LineSeries, {
+      color: '#53b5e8',
+      lineWidth: 2,
+      lastValueVisible: true,
+      priceLineVisible: false,
+    });
+    adxSeries.setData(adxData);
+    adxSeries.createPriceLine({
+      price: 23,
+      color: 'rgba(255,255,255,0.24)',
+      lineWidth: 1,
+      lineStyle: 2,
+      axisLabelVisible: true,
+      title: '23',
+    });
 
     charts[1].addSeries(LineSeries, { color: 'rgba(255,255,255,0.16)', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
       .setData(timestamps.map((timestamp) => ({ time: this.toChartTime(timestamp), value: 70 })));

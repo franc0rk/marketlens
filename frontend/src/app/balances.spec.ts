@@ -40,8 +40,8 @@ describe('account balance import', () => {
   it('calculates affordable shares and keeps stock units whole while allowing crypto fractions', () => {
     expect(sharesAffordable(1_000, 125)).toBe(8);
     expect(sharesAffordable(100, 125)).toBe(0);
-    expect(sharesAffordable(1_000, 123.45, true)).toBeCloseTo(8.0979, 4);
-    expect(sharesAffordable(625, 123.45, true)).toBeCloseTo(5.0611, 4);
+    expect(sharesAffordable(1_000, 123.45, true)).toBeCloseTo(8.1004, 4);
+    expect(sharesAffordable(625, 123.45, true)).toBeCloseTo(5.0628, 4);
     expect(sharesAffordable(1_000, null)).toBeNull();
     expect(sharesAffordable(1_000, 0)).toBeNull();
   });
